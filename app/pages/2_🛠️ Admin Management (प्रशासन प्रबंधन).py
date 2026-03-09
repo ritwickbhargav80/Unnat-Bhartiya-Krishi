@@ -3,6 +3,7 @@ import time
 import streamlit as st
 import base64
 from pathlib import Path
+from dotenv import load_dotenv
 
 from common.pages_header import load_header
 from utils.s3_handler import S3Handler
@@ -10,6 +11,10 @@ from utils.vectorstore_handler import get_total_chunks, vectorize_and_store, del
 
 load_header("admin", "🛠️")
 s3_handler = S3Handler(os.environ.get("AWS_BUCKET_NAME"))
+
+load_dotenv()
+
+mandatory_files = [f.strip() for f in os.getenv("MANDATORY_FILES", "").split(",") if f.strip()]
 
 
 @st.cache_data(ttl=60)
@@ -226,21 +231,18 @@ def render_documents(files, session_uploads: set):
                 </div>
             """)
 
-            # Delete button sits below the card, styled subtly
-            if st.button(
-                f"🗑️ {st.session_state.config['admin_deleted_button']}",
-                key=f"delete_{file['filename']}_{i}",
-                use_container_width=True,
-            ):
-                st.session_state.pending_delete = file["filename"]
-                st.rerun()
+            if file["filename"] not in mandatory_files:
+                if st.button(
+                    f"🗑️ {st.session_state.config['admin_deleted_button']}",
+                    key=f"delete_{file['filename']}_{i}",
+                    use_container_width=True,
+                ):
+                    st.session_state.pending_delete = file["filename"]
+                    st.rerun()
 
 
 st.space("small")
 st.markdown(f"### 📚 {st.session_state.config['admin_ks_title']} ({st.session_state.config['admin_total_chunks'].format(no_of_chunks=get_total_chunks())})")
-
-# show how many chunks present in the faiss
-
 
 if not all_uploaded_files:
     st.html(
