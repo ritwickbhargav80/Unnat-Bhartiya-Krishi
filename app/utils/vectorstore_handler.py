@@ -126,3 +126,38 @@ def similarity_search(query: str, top_k: int = 5) -> List[dict]:
                 })
 
     return results
+
+def delete_chunks_by_filename(filename: str) -> int:
+    """Remove all chunks belonging to a specific file. Returns number of chunks removed."""
+    index, metadata = _load_store()
+
+    if index.ntotal == 0:
+        return 0
+
+    # Find indices to KEEP (everything except the target file)
+    keep_indices = [i for i, m in enumerate(metadata) if m["source"] != filename]
+    removed_count = len(metadata) - len(keep_indices)
+
+    if removed_count == 0:
+        return 0
+
+    if not keep_indices:
+        # All chunks belong to this file — reset store entirely
+        new_index = faiss.IndexFlatL2(EMBEDDING_DIM)
+        new_metadata = []
+    else:
+        # Reconstruct index with only kept vectors
+        # FAISS doesn't support deletion, so we rebuild from scratch
+        all_vectors = np.zeros((index.ntotal, EMBEDDING_DIM), dtype=np.float32)
+        for i in range(index.ntotal):
+            all_vectors[i] = index.reconstruct(i)
+
+        kept_vectors = all_vectors[keep_indices]
+        new_index = faiss.IndexFlatL2(EMBEDDING_DIM)
+        new_index.add(kept_vectors)
+        new_metadata = [metadata[i] for i in keep_indices]
+
+    faiss.write_index(new_index, str(INDEX_PATH))
+    METADATA_PATH.write_bytes(pickle.dumps(new_metadata))
+
+    return removed_count
